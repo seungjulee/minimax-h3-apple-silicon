@@ -59,3 +59,39 @@ Apple Silicon (M1–M5), and the bugs found and fixed along the way.
   load (other local LLM servers, browsers) can starve the render process enough
   that it appears to hang indefinitely rather than fail cleanly — watch `swap`
   usage, not just RAM, if a render seems stuck at model load or first-kernel-compile.
+
+## Update log
+
+### 2026-08-20 — Stack upgrade + Music3 verified working
+
+- **ComfyUI**: `0.33.0` → `0.33.3`. Frontend `1.48.7` → `1.49.6`, workflow
+  templates `0.11.41` → `0.11.44`. `comfy-kitchen` was already at latest (`0.2.31`).
+- **`ComfyUI-MiniMax-H3-Turbo`**: pulled latest (picks up upstream PR #16, a
+  separate fix for a row-count mismatch in the adaln injection — unrelated to
+  and non-conflicting with the NaN fix in this repo's PR #26). Our patch was
+  reapplied after the pull and reverified with a real render.
+- **New: `ComfyUI-SolAttn-MPS`** (`yshenaw/ComfyUI-SolAttn-MPS`) — an opt-in
+  Metal attention accelerator for H3 with real end-to-end benchmarks on M3 Ultra
+  (1.3–1.8x at 480p/720p). Installed but not yet benchmarked on M5 Max here.
+  It's a graph node (`Patch Sol-Attn`), not automatic — existing workflows are
+  unaffected until it's explicitly wired in.
+- **Music3 confirmed working end-to-end**: `minimax_music3_dit_fp16` +
+  `minimax_music3_text_encoder_bf16` (deliberately not the `int8_convrot`
+  variants — same reasoning as H3: quantized paths are exactly where the MPS
+  bugs live, and there's no memory pressure to justify them on 128GB). Three
+  30s tracks rendered successfully, 185–235s each. Scripts in `scripts/music3/`.
+  Note the official template's `SaveAudioAdvanced` node needs `format.quality`
+  as a *separate* nested key, not a flat `quality` field — the flat form fails
+  ComfyUI's schema validation.
+
+### Gotcha: renders can hang indefinitely under memory pressure, not fail cleanly
+
+Hit this twice while restarting after the upgrade: the process would sit at
+"compiling the INT8 Metal kernel" at 0% CPU indefinitely, then die with a
+generic "Global interrupt" on the next request. Root cause was unrelated —
+`swap` was at ~13GB/13GB (essentially full) because of an unrelated 33GB
+`llama-server` process plus browsers competing for the same unified memory
+pool as ComfyUI's ~35GB of resident weights. Once that process exited and swap
+dropped to 0, the identical render completed in 45s. **If a render seems stuck
+at model load or first-kernel-compile with no CPU activity, check `sysctl
+vm.swapusage` before assuming the code regressed.**
