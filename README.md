@@ -116,6 +116,22 @@ audio run as separate latents joined via `LTXVConcatAVLatent` /
   as a *separate* nested key, not a flat `quality` field — the flat form fails
   ComfyUI's schema validation.
 
+### 2026-08-20 — `comfyui_desktop` was shipping as a bash-script placeholder
+
+`/Applications/ComfyUI.app` had a bash-script shell as its executable
+instead of a compiled `main.swift` — the Swift source here was never
+actually built into the installed bundle. It could start the server, but
+had no real GUI/NSApplication process, so quitting the app didn't kill the
+server (confirmed: server process and port both survived an `osascript
+quit`). Fixed by compiling with `swiftc -O main.swift -o ComfyUI -framework
+Cocoa -framework WebKit`, installing the binary into the bundle, and
+ad-hoc codesigning (`codesign --force --deep --sign -`). Verified both
+directions now work: launch starts the server in a real WKWebView window
+(~6s to ready), quit terminates the server process and frees all model
+memory. `main.swift`'s own `applicationWillTerminate` (SIGTERM, 5s
+grace, then SIGKILL) was correct all along — the bundle just wasn't
+running it.
+
 ### Gotcha: renders can hang indefinitely under memory pressure, not fail cleanly
 
 Hit this twice while restarting after the upgrade: the process would sit at
