@@ -49,6 +49,29 @@ Apple Silicon (M1–M5), and the bugs found and fixed along the way.
 - Music3: `Comfy-Org/MiniMax-Music-3` — fp16 DiT recommended over the int8
   variant on Apple Silicon for the same reason.
 
+### LTX-2.5 (video + audio)
+
+Confirmed working, M5 Max, 512x256/2s sanity render, 90s total, first attempt.
+Script: `scripts/ltx25/ltx25.py`. Hand-built API graph (not exported from the
+UI) because the bundled `video_ltx2_5_t2v` template's prompt-rewriter cluster
+(`TextGenerateLTX2Prompt` + a small `gemma4_e2b_it_int8_convrot.safetensors`
+CLIP loader) depends on a file that **does not exist at any resolvable
+location** — not in `Lightricks/LTX-2.5` (confirmed via `HfApi.model_info`),
+not in any `Comfy-Org/ltx-*` repo, not findable via HF search, and the UI's
+own "Download" button silently no-ops without a Comfy.org login. The
+prompt-rewriter is a convenience feature (auto-expands short prompts), not
+load-bearing — the fix is to skip that whole node cluster and wire your own
+prompt text directly into `CLIPTextEncode`, which is what the script does.
+
+The real pipeline (traced from the template's subgraph JSON, then verified
+node-by-node against `/object_info` to get exact input names before wiring
+anything — a hand-built two-stage graph is easy to get subtly wrong) is a
+**two-stage** sampler: base-resolution `LTXVDualCFGGuider` + `ManualSigmas`
+(9-value schedule, ~8 steps) → `LTXVLatentUpsampler` (2x) → a second pass at
+upscaled resolution (4-value schedule, ~3 steps) → `VAEDecodeTiled`. Video and
+audio run as separate latents joined via `LTXVConcatAVLatent` /
+`LTXVSeparateAVLatent` at each stage boundary.
+
 ## Known issues on Apple Silicon
 
 - **Turbo LoRA NaN on MPS** — fixed, see PR #26 above.
