@@ -51,7 +51,16 @@ Apple Silicon (M1–M5), and the bugs found and fixed along the way.
 
 ### LTX-2.5 (video + audio)
 
-Confirmed working, M5 Max, 512x256/2s sanity render, 90s total, first attempt.
+Confirmed working, M5 Max:
+- 512x256/2s sanity render: 90s
+- 1280x704/2s production-resolution render: 270s (4m30s)
+
+Note: use dimensions divisible by 32, not just 8 -- an earlier 288-height
+request silently rounded down to 256 in the output; 704 (/32=22 exact)
+landed at the exact requested size. Compute does not scale linearly with
+resolution: 6.9x more pixels (512x256->1280x704) cost only 3x the time
+(90s->270s), consistent with fixed per-render overhead (model load, text
+encoding, VAE setup) that does not grow with resolution.
 Script: `scripts/ltx25/ltx25.py`. Hand-built API graph (not exported from the
 UI) because the bundled `video_ltx2_5_t2v` template's prompt-rewriter cluster
 (`TextGenerateLTX2Prompt` + a small `gemma4_e2b_it_int8_convrot.safetensors`
